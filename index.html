@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jazz - Urban Vibe</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        /* General styling for a dark, urban feel */
+        body {
+            background: #111;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Mobile frame simulation */
+        #camera-frame {
+            position: relative;
+            width: 90vw;
+            height: 80vh;
+            max-width: 450px;
+            max-height: 800px;
+            border-radius: 40px;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #camera-view {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #camera-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: contrast(1.1) saturate(1.2);
+            transition: filter 0.5s ease-in-out, transform 0.5s ease-in-out;
+        }
+        
+        #camera-feed.blue-note { filter: sepia(0.3) hue-rotate(-20deg) contrast(1.15) saturate(1.5); }
+        #camera-feed.akron-after-dark { filter: grayscale(0.8) brightness(1.2) contrast(1.3); }
+        #camera-feed.cuyahoga-smooth { filter: contrast(1.1) saturate(1.3) hue-rotate(-5deg); }
+        
+        #camera-feed.depth-active { filter: blur(3px); }
+        #camera-feed.depth-active.focused { filter: blur(0px); }
+        #camera-feed.night-shot-active { filter: brightness(1.5) contrast(1.4) saturate(1.1) blur(0.5px); }
+
+        /* The UI overlay with controls */
+        #controls-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(0deg, rgba(17, 17, 17, 0.8) 0%, rgba(17, 17, 17, 0) 100%);
+        }
+
+        .presets {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .preset-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+
+        .preset-btn.active {
+            background: #fff;
+            color: #111;
+            border-color: #fff;
+        }
+
+        /* The Shutter Button */
+        #shutter-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: #fff;
+            border: 5px solid rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        #shutter-btn:active {
+            transform: scale(0.9);
+        }
+
+        /* Quick Feature Toggles */
+        #feature-toggles {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 10;
+        }
+        
+        .feature-toggle-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .feature-toggle-btn.active {
+            background: #fff;
+            color: #111;
+        }
+        
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 10px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            pointer-events: none;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body>
+    <div id="camera-frame">
+        <div id="camera-view">
+            <video id="camera-feed" playsinline autoplay muted></video>
+            <div id="message-box"></div>
+        </div>
+        <div id="controls-overlay">
+            <div class="presets">
+                <button id="preset-blue-note" class="preset-btn">The Blue Note</button>
+                <button id="preset-akron-dark" class="preset-btn">Akron After Dark</button>
+                <button id="preset-cuyahoga-smooth" class="preset-btn">Cuyahoga Smooth</button>
+            </div>
+            <div id="shutter-btn"></div>
+        </div>
+        <div id="feature-toggles">
+            <button id="depth-toggle" class="feature-toggle-btn" title="Depth Locator">
+                <span style="font-size: 1.5rem; line-height: 1;">◉</span>
+            </button>
+            <button id="night-shot-toggle" class="feature-toggle-btn" title="Night Shot">
+                <span style="font-size: 1.5rem; line-height: 1;">🌙</span>
+            </button>
+            <button id="focal-follow-toggle" class="feature-toggle-btn" title="Focal Follow">
+                <span style="font-size: 1.5rem; line-height: 1;">🎯</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('camera-feed');
+        const shutterBtn = document.getElementById('shutter-btn');
+        const presets = document.querySelectorAll('.preset-btn');
+        const depthToggle = document.getElementById('depth-toggle');
+        const nightShotToggle = document.getElementById('night-shot-toggle');
+        const focalFollowToggle = document.getElementById('focal-follow-toggle');
+        const messageBox = document.getElementById('message-box');
+
+        // State variables for toggles
+        let isDepthActive = false;
+        let isNightShotActive = false;
+        let isFocalFollowActive = false;
+
+        // Show a temporary message
+        function showMessage(text) {
+            messageBox.textContent = text;
+            messageBox.style.opacity = 1;
+            setTimeout(() => {
+                messageBox.style.opacity = 0;
+            }, 1500);
+        }
+
+        // Start the camera feed
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                showMessage("Jazz is ready. Let's create.");
+            } catch (err) {
+                console.error("Error accessing the camera: ", err);
+                showMessage("Camera access denied or unavailable.");
+            }
+        }
+        
+        // Handle preset button clicks
+        presets.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove active state from all buttons
+                presets.forEach(p => p.classList.remove('active'));
+                
+                // Add active state to the clicked button
+                btn.classList.add('active');
+
+                // Apply filter based on the button's ID
+                video.className = '';
+                video.classList.add(btn.id.replace('preset-', ''));
+                showMessage(`${btn.textContent} mode active.`);
+            });
+        });
+
+        // Focal Follow simulation logic
+        let followInterval;
+        focalFollowToggle.addEventListener('click', () => {
+            isFocalFollowActive = !isFocalFollowActive;
+            focalFollowToggle.classList.toggle('active', isFocalFollowActive);
+            
+            if (isFocalFollowActive) {
+                showMessage("Focal Follow engaged. It's all about the motion.");
+                const panAmount = 2; // pan in pixels
+                let panDirection = 1;
+                followInterval = setInterval(() => {
+                    const currentX = parseFloat(video.style.transform.match(/translateX\((.*)px\)/)?.[1] || 0);
+                    const newX = currentX + panAmount * panDirection;
+                    if (newX > 15 || newX < -15) {
+                        panDirection *= -1;
+                    }
+                    video.style.transform = `translateX(${newX}px) scale(1.05)`;
+                }, 50);
+            } else {
+                showMessage("Focal Follow disengaged. Stillness has its own vibe.");
+                clearInterval(followInterval);
+                video.style.transform = '';
+            }
+        });
+
+        // Depth Locator toggle logic
+        depthToggle.addEventListener('click', () => {
+            isDepthActive = !isDepthActive;
+            depthToggle.classList.toggle('active', isDepthActive);
+            if (isDepthActive) {
+                video.classList.add('depth-active');
+                video.style.clipPath = 'inset(20% 20% round 15px)';
+                showMessage("Depth Locator active. That focus is so sharp.");
+            } else {
+                video.classList.remove('depth-active');
+                video.style.clipPath = '';
+                showMessage("Depth Locator disengaged.");
+            }
+        });
+
+        // Night Shot toggle logic
+        nightShotToggle.addEventListener('click', () => {
+            isNightShotActive = !isNightShotActive;
+            nightShotToggle.classList.toggle('active', isNightShotActive);
+            if (isNightShotActive) {
+                video.classList.add('night-shot-active');
+                showMessage("Night Shot activated. Let's see in the dark.");
+            } else {
+                video.classList.remove('night-shot-active');
+                showMessage("Night Shot deactivated.");
+            }
+        });
+
+        // New function to capture and download image
+        function captureAndDownload() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            
+            // Apply current CSS filters to the canvas
+            context.filter = window.getComputedStyle(video).filter;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageDataURL = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `jazz_urban_vibe_${Date.now()}.png`;
+            link.href = imageDataURL;
+            link.click();
+            
+            showMessage("Shot captured and downloaded.");
+        }
+
+        // Shutter button click event now calls the new function
+        shutterBtn.addEventListener('click', () => {
+            captureAndDownload();
+        });
+
+        // Initial camera start on page load
+        startCamera();
+    </script>
+</body>
+</html>

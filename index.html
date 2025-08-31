@@ -50,6 +50,11 @@
             transition: filter 0.5s ease-in-out, transform 0.5s ease-in-out;
         }
         
+        /* New CSS for mirroring the video feed horizontally for selfies */
+        #camera-feed.mirrored {
+            transform: scaleX(-1);
+        }
+
         #camera-feed.blue-note { filter: sepia(0.3) hue-rotate(-20deg) contrast(1.15) saturate(1.5); }
         #camera-feed.akron-after-dark { filter: grayscale(0.8) brightness(1.2) contrast(1.3); }
         #camera-feed.cuyahoga-smooth { filter: contrast(1.1) saturate(1.3) hue-rotate(-5deg); }
@@ -107,8 +112,23 @@
             transition: all 0.2s ease;
         }
 
+        #shutter-btn.video-mode {
+            background: #ff4d4d;
+            border-color: rgba(255, 77, 77, 0.4);
+        }
+
         #shutter-btn:active {
             transform: scale(0.9);
+        }
+        
+        #shutter-btn.recording {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
         }
 
         /* Quick Feature Toggles */
@@ -156,6 +176,48 @@
             pointer-events: none;
             z-index: 20;
         }
+
+        /* Video/Photo Switch */
+        #mode-switch {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .mode-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .mode-btn.active {
+            background: #fff;
+            color: #111;
+            font-weight: bold;
+        }
+
+        /* Recording timer style */
+        #recording-timer {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: #ff4d4d;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
     </style>
 </head>
 <body>
@@ -163,6 +225,7 @@
         <div id="camera-view">
             <video id="camera-feed" playsinline autoplay muted></video>
             <div id="message-box"></div>
+            <div id="recording-timer">00:00</div>
         </div>
         <div id="controls-overlay">
             <div class="presets">
@@ -171,6 +234,10 @@
                 <button id="preset-cuyahoga-smooth" class="preset-btn">Cuyahoga Smooth</button>
             </div>
             <div id="shutter-btn"></div>
+            <div id="mode-switch">
+                <button id="mode-photo" class="mode-btn active">Photo</button>
+                <button id="mode-video" class="mode-btn">Video</button>
+            </div>
         </div>
         <div id="feature-toggles">
             <button id="depth-toggle" class="feature-toggle-btn" title="Depth Locator">
@@ -181,6 +248,10 @@
             </button>
             <button id="focal-follow-toggle" class="feature-toggle-btn" title="Focal Follow">
                 <span style="font-size: 1.5rem; line-height: 1;">🎯</span>
+            </button>
+            <!-- New camera flip button -->
+            <button id="flip-camera-btn" class="feature-toggle-btn" title="Flip Camera">
+                <span style="font-size: 1.5rem; line-height: 1;">🔄</span>
             </button>
         </div>
     </div>
@@ -193,11 +264,22 @@
         const nightShotToggle = document.getElementById('night-shot-toggle');
         const focalFollowToggle = document.getElementById('focal-follow-toggle');
         const messageBox = document.getElementById('message-box');
+        const modeSwitch = document.getElementById('mode-switch');
+        const recordingTimer = document.getElementById('recording-timer');
+        const flipCameraBtn = document.getElementById('flip-camera-btn');
 
         // State variables for toggles
         let isDepthActive = false;
         let isNightShotActive = false;
         let isFocalFollowActive = false;
+        let currentMode = 'photo';
+        let mediaRecorder;
+        let recordedChunks = [];
+        let timerInterval;
+        let startTime;
+
+        // New state variable to track the current camera
+        let currentFacingMode = 'environment'; // 'environment' is the back camera, 'user' is the front
 
         // Show a temporary message
         function showMessage(text) {
@@ -208,18 +290,40 @@
             }, 1500);
         }
 
-        // Start the camera feed
+        // Start or switch the camera feed
         async function startCamera() {
+            // Stop the existing stream to release the camera
+            const currentStream = video.srcObject;
+            if (currentStream) {
+                const tracks = currentStream.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                // Request the camera with the current facingMode
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: currentFacingMode
+                    },
+                    audio: true
+                });
                 video.srcObject = stream;
-                showMessage("Jazz is ready. Let's create.");
+                // Add or remove the 'mirrored' class based on the camera
+                video.classList.toggle('mirrored', currentFacingMode === 'user');
+                showMessage(`Switched to ${currentFacingMode === 'user' ? 'Front Camera' : 'Back Camera'}.`);
             } catch (err) {
                 console.error("Error accessing the camera: ", err);
                 showMessage("Camera access denied or unavailable.");
             }
         }
         
+        // Add the event listener for the new flip button
+        flipCameraBtn.addEventListener('click', () => {
+            // Toggle the camera mode and restart the camera
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            startCamera();
+        });
+
         // Handle preset button clicks
         presets.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -289,13 +393,19 @@
             }
         });
 
-        // New function to capture and download image
-        function captureAndDownload() {
+        // Capture and download image logic
+        function captureAndDownloadImage() {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const context = canvas.getContext('2d');
             
+            // If it's the front camera, mirror the image on the canvas
+            if (currentFacingMode === 'user') {
+                context.translate(canvas.width, 0);
+                context.scale(-1, 1);
+            }
+
             // Apply current CSS filters to the canvas
             context.filter = window.getComputedStyle(video).filter;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -309,9 +419,84 @@
             showMessage("Shot captured and downloaded.");
         }
 
-        // Shutter button click event now calls the new function
+        // Video recording logic
+        function startRecording() {
+            recordedChunks = [];
+            const stream = video.srcObject;
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `jazz_video_${Date.now()}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+            };
+            mediaRecorder.start();
+            shutterBtn.classList.add('recording');
+            showMessage("Recording started.");
+            
+            startTime = Date.now();
+            recordingTimer.style.opacity = 1;
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function stopRecording() {
+            if (mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            shutterBtn.classList.remove('recording');
+            showMessage("Recording stopped. Downloading video.");
+            clearInterval(timerInterval);
+            recordingTimer.style.opacity = 0;
+            recordingTimer.textContent = '00:00';
+        }
+
+        function updateTimer() {
+            const elapsedTime = Date.now() - startTime;
+            const totalSeconds = Math.floor(elapsedTime / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            recordingTimer.textContent = formattedTime;
+        }
+
+        // Shutter button event handler
         shutterBtn.addEventListener('click', () => {
-            captureAndDownload();
+            if (currentMode === 'photo') {
+                captureAndDownloadImage();
+            } else if (currentMode === 'video') {
+                if (shutterBtn.classList.contains('recording')) {
+                    stopRecording();
+                } else {
+                    startRecording();
+                }
+            }
+        });
+
+        // Mode switch event handler
+        modeSwitch.addEventListener('click', (e) => {
+            if (e.target.id === 'mode-photo') {
+                currentMode = 'photo';
+                shutterBtn.classList.remove('video-mode');
+                modeSwitch.querySelector('#mode-photo').classList.add('active');
+                modeSwitch.querySelector('#mode-video').classList.remove('active');
+                showMessage("Switched to Photo mode.");
+            } else if (e.target.id === 'mode-video') {
+                currentMode = 'video';
+                shutterBtn.classList.add('video-mode');
+                modeSwitch.querySelector('#mode-video').classList.add('active');
+                modeSwitch.querySelector('#mode-photo').classList.remove('active');
+                showMessage("Switched to Video mode.");
+            }
         });
 
         // Initial camera start on page load
